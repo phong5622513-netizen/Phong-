@@ -1,0 +1,37 @@
+-- Tạo ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MainMenuGui"
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Tạo nút mở menu
+local menuButton = Instance.new("ImageButton")
+menuButton.Name = "MenuButton"
+menuButton.Size = UDim2.new(0, 50, 0, 50)
+menuButton.Position = UDim2.new(0, 20, 0, 20)
+menuButton.Image = "rbxassetid://3926305904" -- bạn có thể thay ID hình nút khác
+menuButton.Parent = screenGui
+
+-- Bo góc cho nút
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = menuButton
+
+-- Tạo khung menu
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0, 200, 0, 300)
+menuFrame.Position = UDim2.new(0, 80, 0, 20)
+menuFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+menuFrame.Visible = false -- ban đầu ẩn
+menuFrame.Parent = screenGui
+
+-- Bo góc cho menu
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 15)
+frameCorner.Parent = menuFrame
+
+-- Script đóng/mở menu
+local isOpen = false
+menuButton.MouseButton1Click:Connect(function()
+	isOpen = not isOpen
+	menuFrame.Visible = isOpen
+end)
