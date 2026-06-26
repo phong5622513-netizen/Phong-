@@ -1,0 +1,108 @@
+-- LocalScript (Đặt trong StarterPlayerScripts)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Cấu hình Vòng FOV (UI Vòng tròn không cần GUI)
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Visible = true
+FOVCircle.Thickness = 2
+FOVCircle.Color = Color3.fromRGB(0, 255, 128) -- Màu xanh neon (Có thể đổi màu tùy ý)
+FOVCircle.Radius = 120 -- Kích cỡ vừa - trung bình
+FOVCircle.Filled = false
+
+-- Cấu hình Aimbot
+local AIM_PART = "Head" -- Khóa mục tiêu vào Đầu
+local CurrentTarget = nil
+
+-- Hàm kiểm tra tường chắn (Raycast)
+local function IsVisible(targetPart)
+	local origin = Camera.CFrame.Position
+	local direction = targetPart.Position - origin
+	
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	-- Bỏ qua bản thân người chơi để không tự chắn raycast
+	raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+	raycastParams.IgnoreWater = true
+	
+	local result = workspace:Raycast(origin, direction, raycastParams)
+	
+	-- Nếu không chạm gì hoặc chạm chính bộ phận của mục tiêu/mô hình mục tiêu -> Thấy được
+	if result then
+		local hitInstance = result.Instance
+		if hitInstance:IsDescendantOf(targetPart.Parent) then
+			return true
+		end
+		return false -- Bị tường hoặc vật thể khác che
+	end
+	return true
+end
+
+-- Hàm tìm mục tiêu hợp lệ gần tâm màn hình nhất
+local function GetClosestTarget()
+	local closestPlayer = nil
+	local shortestDistance = FOVCircle.Radius
+
+	for _, player in pairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local character = player.Character
+			local head = character:FindFirstChild(AIM_PART)
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			
+			-- Kiểm tra còn sống
+			if head and humanoid and humanoid.Health > 0 then
+				local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+				
+				if onScreen then
+					-- Tính khoảng cách từ tâm vòng tròn đến vị trí mục tiêu trên màn hình
+					local mousePos = Vector2.new(Mouse.X, Mouse.Y)
+					local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
+					local distance = (targetPos2D - mousePos).Magnitude
+					
+					-- Nếu nằm trong vòng FOV và gần tâm nhất
+					if distance < shortestDistance then
+						-- Kiểm tra raycast xem có bị khuất sau tường không
+						if IsVisible(head) then
+							shortestDistance = distance
+							closestPlayer = character
+						end
+					end
+				end
+			end
+		end
+	end
+	return closestPlayer
+end
+
+-- Vòng lặp cập nhật liên tục (RenderStepped giúp camera mượt hơn)
+RunService.RenderStepped:Connect(function()
+	-- Luôn cập nhật vị trí vòng tròn theo tâm chuột/màn hình
+	FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
+	
+	-- Nếu mục tiêu hiện tại bị chết hoặc không còn bộ phận Head, hủy khóa
+	if CurrentTarget then
+		local humanoid = CurrentTarget:FindFirstChildOfClass("Humanoid")
+		local head = CurrentTarget:FindFirstChild(AIM_PART)
+		
+		if not humanoid or humanoid.Health <= 0 or not head or not IsVisible(head) then
+			CurrentTarget = nil
+		end
+	end
+	
+	-- Nếu chưa có mục tiêu hoặc mục tiêu cũ mất hiệu lực, quét tìm mục tiêu mới
+	if not CurrentTarget then
+		CurrentTarget = GetClosestTarget()
+	end
+	
+	-- Nếu tìm thấy mục tiêu hợp lệ -> Khóa Camera thẳng vào Đầu
+	if CurrentTarget then
+		local head = CurrentTarget:FindFirstChild(AIM_PART)
+		if head then
+			-- Điều khiển CFrame của Camera nhìn thẳng vào vị trí Head
+			Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
+		end
+	end
+end)
