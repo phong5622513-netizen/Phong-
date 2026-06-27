@@ -1,108 +1,138 @@
--- LocalScript (Đặt trong StarterPlayerScripts)
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
 
--- Cấu hình Vòng FOV (UI Vòng tròn không cần GUI)
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Visible = true
-FOVCircle.Thickness = 2
-FOVCircle.Color = Color3.fromRGB(0, 255, 128) -- Màu xanh neon (Có thể đổi màu tùy ý)
-FOVCircle.Radius = 120 -- Kích cỡ vừa - trung bình
-FOVCircle.Filled = false
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
 
--- Cấu hình Aimbot
-local AIM_PART = "Head" -- Khóa mục tiêu vào Đầu
-local CurrentTarget = nil
+-- Cấu hình mặc định
+local scriptEnabled = true
+local CustomersFolder = Workspace:FindFirstChild("Customers")
 
--- Hàm kiểm tra tường chắn (Raycast)
-local function IsVisible(targetPart)
-	local origin = Camera.CFrame.Position
-	local direction = targetPart.Position - origin
-	
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	-- Bỏ qua bản thân người chơi để không tự chắn raycast
-	raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-	raycastParams.IgnoreWater = true
-	
-	local result = workspace:Raycast(origin, direction, raycastParams)
-	
-	-- Nếu không chạm gì hoặc chạm chính bộ phận của mục tiêu/mô hình mục tiêu -> Thấy được
-	if result then
-		local hitInstance = result.Instance
-		if hitInstance:IsDescendantOf(targetPart.Parent) then
-			return true
-		end
-		return false -- Bị tường hoặc vật thể khác che
-	end
-	return true
+----------------------------------------
+-- 1. TẠO GIAO DIỆN BẬT / TẮT (UI TOGGLE)
+----------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "GroceryDetectorUI"
+pcall(function() screenGui.Parent = CoreGui end)
+if not screenGui.Parent then screenGui.Parent = playerGui end
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 150, 0, 40)
+toggleButton.Position = UDim2.new(0, 20, 0, 20)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0) -- Màu xanh lá (ON)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 16
+toggleButton.Text = "Detector: ON"
+toggleButton.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = toggleButton
+
+-- Hàm xóa sạch nhãn chữ khi tắt script
+local function clearAllTags()
+    if CustomersFolder then
+        for _, obj in pairs(CustomersFolder:GetChildren()) do
+            local head = obj:FindFirstChild("Head")
+            if head then
+                local tag = head:FindFirstChild("StatusTag")
+                if tag then tag:Destroy() end
+            end
+        end
+    end
 end
 
--- Hàm tìm mục tiêu hợp lệ gần tâm màn hình nhất
-local function GetClosestTarget()
-	local closestPlayer = nil
-	local shortestDistance = FOVCircle.Radius
-
-	for _, player in pairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local character = player.Character
-			local head = character:FindFirstChild(AIM_PART)
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			
-			-- Kiểm tra còn sống
-			if head and humanoid and humanoid.Health > 0 then
-				local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-				
-				if onScreen then
-					-- Tính khoảng cách từ tâm vòng tròn đến vị trí mục tiêu trên màn hình
-					local mousePos = Vector2.new(Mouse.X, Mouse.Y)
-					local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
-					local distance = (targetPos2D - mousePos).Magnitude
-					
-					-- Nếu nằm trong vòng FOV và gần tâm nhất
-					if distance < shortestDistance then
-						-- Kiểm tra raycast xem có bị khuất sau tường không
-						if IsVisible(head) then
-							shortestDistance = distance
-							closestPlayer = character
-						end
-					end
-				end
-			end
-		end
-	end
-	return closestPlayer
-end
-
--- Vòng lặp cập nhật liên tục (RenderStepped giúp camera mượt hơn)
-RunService.RenderStepped:Connect(function()
-	-- Luôn cập nhật vị trí vòng tròn theo tâm chuột/màn hình
-	FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
-	
-	-- Nếu mục tiêu hiện tại bị chết hoặc không còn bộ phận Head, hủy khóa
-	if CurrentTarget then
-		local humanoid = CurrentTarget:FindFirstChildOfClass("Humanoid")
-		local head = CurrentTarget:FindFirstChild(AIM_PART)
-		
-		if not humanoid or humanoid.Health <= 0 or not head or not IsVisible(head) then
-			CurrentTarget = nil
-		end
-	end
-	
-	-- Nếu chưa có mục tiêu hoặc mục tiêu cũ mất hiệu lực, quét tìm mục tiêu mới
-	if not CurrentTarget then
-		CurrentTarget = GetClosestTarget()
-	end
-	
-	-- Nếu tìm thấy mục tiêu hợp lệ -> Khóa Camera thẳng vào Đầu
-	if CurrentTarget then
-		local head = CurrentTarget:FindFirstChild(AIM_PART)
-		if head then
-			-- Điều khiển CFrame của Camera nhìn thẳng vào vị trí Head
-			Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
-		end
-	end
+toggleButton.MouseButton1Click:Connect(function()
+    scriptEnabled = not scriptEnabled
+    if scriptEnabled then
+        toggleButton.Text = "Detector: ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    else
+        toggleButton.Text = "Detector: OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+        clearAllTags()
+    end
 end)
+
+----------------------------------------
+-- 2. HÀM KIỂM TRA THẬT / GIẢ (QUÉT THUỘC TÍNH)
+----------------------------------------
+local function processNPC(npc)
+    if not npc:IsA("Model") or not npc:FindFirstChild("Head") then return end
+    
+    -- Mặc định ban đầu xem như người thật cho đến khi tìm thấy bằng chứng giả mạo
+    local isFakeValue = false 
+    
+    -- Cách 1: Quét tất cả thuộc tính (Attributes) của NPC để tìm dấu vết "Fake" hoặc "Doppelganger"
+    for key, val in pairs(npc:GetAttributes()) do
+        local keyLower = tostring(key):lower()
+        if keyLower:find("fake") or keyLower:find("doppel") or keyLower:find("clone") or keyLower:find("monster") then
+            if val == true or tostring(val):lower() == "fake" then
+                isFakeValue = true
+                break
+            end
+        end
+    end
+    
+    -- Cách 2: Nếu chưa tìm thấy, quét các Object giá trị ẩn chứa bên trong cơ thể NPC (Tránh quét vào Humanoid gây lỗi)
+    if not isFakeValue then
+        for _, child in pairs(npc:GetChildren()) do
+            if child:IsA("ValueBase") then
+                local childLower = child.Name:lower()
+                if childLower:find("fake") or childLower:find("type") or childLower:find("id") then
+                    if child.Value == true or tostring(child.Value):lower() == "fake" or tostring(child.Value) == "2" then
+                        isFakeValue = true
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- Tạo hoặc cập nhật nhãn chữ trên đầu NPC
+    local head = npc.Head
+    local bGui = head:FindFirstChild("StatusTag") or Instance.new("BillboardGui")
+    bGui.Name = "StatusTag"
+    bGui.Size = UDim2.new(0, 200, 0, 50)
+    bGui.AlwaysOnTop = true
+    bGui.ExtentsOffset = Vector3.new(0, 3, 0)
+    
+    local textLabel = bGui:FindFirstChild("TextLabel") or Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextSize = 24
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.Parent = bGui
+    
+    -- Hiển thị màu sắc theo trạng thái
+    if isFakeValue then
+        textLabel.Text = "[ KẺ GIẢ MẠO ❌ ]"
+        textLabel.TextColor3 = Color3.fromRGB(255, 0, 0) -- Màu Đỏ
+    else
+        textLabel.Text = "[ NGƯỜI THẬT ✅ ]"
+        textLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Màu Xanh Lá
+    end
+    
+    bGui.Parent = head
+end
+
+----------------------------------------
+-- 3. VÒNG LẶP KIỂM TRA LIÊN TỤC KHU VỰC KHÁCH HÀNG
+----------------------------------------
+while true do
+    if scriptEnabled then
+        -- Cập nhật lại đường dẫn phòng trường hợp game tải lại thư mục Customers
+        CustomersFolder = Workspace:FindFirstChild("Customers")
+        
+        if CustomersFolder then
+            for _, npc in pairs(CustomersFolder:GetChildren()) do
+                pcall(function()
+                    processNPC(npc)
+                end)
+            end
+        end
+    end
+    task.wait(1) -- Quét lại mỗi 1 giây
+end
